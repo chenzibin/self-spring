@@ -3,7 +3,7 @@ package self.spring.framework.annotation;
 import java.lang.annotation.*;
 
 /**
- * Service
+ * Controller
  *
  * @author chenzb
  * @date 2019/11/26
@@ -11,7 +11,7 @@ import java.lang.annotation.*;
 @Target({ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-public @interface Service {
+public @interface Repository {
 
-    String value() default "";
+    String value();
 }

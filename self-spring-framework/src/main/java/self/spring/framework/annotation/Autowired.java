@@ -3,15 +3,15 @@ package self.spring.framework.annotation;
 import java.lang.annotation.*;
 
 /**
- * Service
+ * Autowired
  *
  * @author chenzb
- * @date 2019/11/26
+ * @date 2019/11/27
  */
-@Target({ElementType.TYPE})
+@Target({ElementType.FIELD, ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-public @interface Service {
+public @interface Autowired {
 
     String value() default "";
 }
