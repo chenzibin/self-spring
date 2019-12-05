@@ -1,15 +1,17 @@
 package self.spring.framework.web.servlet;
 
-import javax.annotation.Resource;
+import self.spring.framework.annotation.*;
+
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.Properties;
+import java.io.*;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.net.URL;
+import java.util.*;
 
 /**
  * DispatcherServlet
@@ -19,31 +21,181 @@ import java.util.Properties;
  */
 public class DispatcherServlet extends HttpServlet {
 
+    /**
+     * 保存application.properties配置文件的内容
+     */
+    private Properties contextConfig = new Properties();
+
+    /**
+     * 保存扫描的类名
+     */
+    private List<String> classNames = new ArrayList<>();
+
+    /**
+     * IOC容器，保存所有bean
+     */
+    private Map<String, Object> ioc = new HashMap<>();
+
+    /**
+     * 保存URL和Method的映射关系
+     */
+    private Map<String, Method> handlerMapping = new HashMap<>();
+    /**
+     * 1、className: controllerInstance
+     * 2、requestUrl: controllerMethod
+     * 3、beanName: serviceInstance
+     * 4、interfaceName: serviceInstance
+     */
+    private Map<String, Object> mapping = new HashMap<>();
+
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        resp.getWriter().print("hello");
+        doPost(req, resp);
     }
 
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        super.doPost(req, resp);
+        try {
+            doDispatcher(req, resp);
+        } catch (InvocationTargetException | IllegalAccessException e) {
+            resp.getWriter().write("500");
+        }
+    }
+
+    private void doDispatcher(HttpServletRequest req, HttpServletResponse resp) throws IOException, InvocationTargetException, IllegalAccessException {
+        String servletPath = req.getServletPath();
+        if (!mapping.containsKey(servletPath)) {
+            resp.getWriter().write("404 Not Found");
+        }
+
+        Method method = (Method) mapping.get(servletPath);
+        Object instance = mapping.get(method.getDeclaringClass().getCanonicalName());
+
+        Map<String, String[]> params = req.getParameterMap();
+        Object[] invokeParams = Arrays.stream(method.getParameters())
+                .map(parameter -> {
+                    if (parameter.isAnnotationPresent(RequestParam.class)) {
+                        RequestParam requestParam = parameter.getAnnotation(RequestParam.class);
+                        String paramName = requestParam.value();
+                        if (params.containsKey(paramName)) {
+                            return params.get(paramName)[0];
+                        }
+                    }
+                    return null;
+                }).toArray();
+
+        Object result = method.invoke(instance, (Object[]) invokeParams);
+        if (result != null) {
+            resp.getWriter().write(result.toString());
+        }
     }
 
     @Override
     public void init() throws ServletException {
-        /*
-        * 1、扫描scanPackage包路径
-        * 2、实例化并缓存带有指定注解的类, 格式为：<beanName, classInstance>, 指定注解包括 Controller\Service\Repository\component
-        * 3、实例化并缓存带有指定注解的方法，格式为：<url, methodInstance>, 指定注解包括 RequestMapping\PostMapping\GetMapping
-        * 4、对于缓存的类, 注入带有指定注解的依赖类实例, 指定注解包括 Autowired
-        *
-        * */
-        try(InputStream in = new FileInputStream("application.properties")) {
-
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        }
-        Properties properties = System.
+        // 1. 加载配置文件
+        doLoadConfig();
+        // 2. 扫描相关类
+        doScanner(contextConfig.getProperty("scanPackage"));
+        // 3. 初始化扫描到的类，并放入Ioc容器
+        doInstance();
+        // 4. 完成依赖注入
+        doAutowired();
+        // 5. 初始化HandlerMapping
+        initHandlerMapping();
     }
 
+    private void doLoadConfig() {
+        try (InputStream in = this.getClass().getClassLoader().getResourceAsStream("application.properties")) {
+            contextConfig.load(in);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void doScanner(String scanPackage) {
+        URL url = this.getClass().getClassLoader().getResource(scanPackage.replace(".", "/"));
+        assert url != null;
+        File dir = new File(url.getFile());
+        File[] files = dir.listFiles();
+        if (files == null) {
+            return;
+        }
+        for (File file : files) {
+            if (file.isDirectory()) {
+                doScanner(String.format("%s.%s", scanPackage, file.getName()));
+            } else {
+                if (!file.getName().endsWith(".class")) {
+                    continue;
+                }
+                String className = String.format("%s.%s", scanPackage, file.getName().replace(".class", ""));
+                classNames.add(className);
+            }
+        }
+    }
+
+    private void doInstance() {
+        try {
+            for (String className : classNames) {
+                Class clazz = Class.forName(className);
+                if (clazz.isAnnotationPresent(Controller.class)) {
+                    mapping.put(className, clazz.newInstance());
+                } else if (clazz.isAnnotationPresent(Service.class)) {
+                    Service service = (Service) clazz.getAnnotation(Service.class);
+                    String beanName = service.value();
+                    if ("".equals(beanName)) {
+                        beanName = clazz.getName();
+                    }
+                    Object instance = clazz.newInstance();
+                    mapping.put(beanName, instance);
+
+                    for (Class classInterface : clazz.getInterfaces()) {
+                        mapping.put(classInterface.getName(), instance);
+                    }
+                }
+            }
+        } catch (IllegalAccessException | InstantiationException | ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void doAutowired() {
+        try {
+            for (Object object : mapping.values()) {
+                if (object == null || !object.getClass().isAnnotationPresent(Controller.class)) {
+                    continue;
+                }
+                Object instance = mapping.get(object.getClass().getName());
+                for (Field field : object.getClass().getDeclaredFields()) {
+                    if (!field.isAnnotationPresent(Autowired.class)) {
+                        continue;
+                    }
+                    Autowired autowired = field.getAnnotation(Autowired.class);
+                    String serviceName = autowired.value();
+                    if ("".equals(serviceName)) {
+                        serviceName = field.getType().getName();
+                    }
+                    field.setAccessible(true);
+                    field.set(instance, mapping.get(serviceName));
+                }
+
+            }
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void initHandlerMapping() {
+        String baseUrl = "";
+        if (clazz.isAnnotationPresent(RequestMapping.class)) {
+            RequestMapping classRequestMapping = (RequestMapping) clazz.getAnnotation(RequestMapping.class);
+            baseUrl = classRequestMapping.value();
+        }
+        for (Method method : clazz.getMethods()) {
+            if (method.isAnnotationPresent(RequestMapping.class)) {
+                RequestMapping methodRequestMapping = method.getAnnotation(RequestMapping.class);
+                String url = baseUrl + methodRequestMapping.value();
+                mapping.put(url, method);
+            }
+        }
+    }
 }

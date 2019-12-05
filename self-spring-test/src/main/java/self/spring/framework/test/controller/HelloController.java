@@ -3,6 +3,7 @@ package self.spring.framework.test.controller;
 import self.spring.framework.annotation.Autowired;
 import self.spring.framework.annotation.Controller;
 import self.spring.framework.annotation.RequestMapping;
+import self.spring.framework.annotation.RequestParam;
 import self.spring.framework.test.service.api.HelloService;
 
 /**
@@ -19,7 +20,7 @@ public class HelloController {
     private HelloService helloService;
 
     @RequestMapping("/say")
-    public Object sayHello() {
-        return helloService.hello();
+    public Object sayHello(@RequestParam("name") String name) {
+        return helloService.hello(name);
     }
 }

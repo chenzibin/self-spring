@@ -13,7 +13,7 @@ import self.spring.framework.test.service.api.HelloService;
 public class HelloServiceImpl implements HelloService {
 
     @Override
-    public String hello() {
-        return "hello, world!";
+    public String hello(String name) {
+        return String.format("hello, %s !", name);
     }
 }

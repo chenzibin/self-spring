@@ -23,8 +23,8 @@ public class JettyServerStart {
         connector.setPort(8080);
         server.setConnectors(new Connector[] { connector });
         ServletContextHandler context = new ServletContextHandler();
-        context.setContextPath("/");
-        context.addServlet(DispatcherServlet.class, "/hello");
+        context.setContextPath("/self/spring");
+        context.addServlet(DispatcherServlet.class, "/");
         HandlerCollection handlers = new HandlerCollection();
         handlers.setHandlers(new Handler[] { context, new DefaultHandler() });
         server.setHandler(handlers);

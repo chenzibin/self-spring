@@ -8,5 +8,5 @@ package self.spring.framework.test.service.api;
  */
 public interface HelloService {
 
-    String hello();
+    String hello(String name);
 }
