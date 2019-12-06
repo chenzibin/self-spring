@@ -6,6 +6,9 @@ import self.spring.framework.annotation.RequestMapping;
 import self.spring.framework.annotation.RequestParam;
 import self.spring.framework.test.service.api.HelloService;
 
+import javax.servlet.ServletResponse;
+import javax.servlet.http.HttpServletRequest;
+
 /**
  * HelloController
  *
@@ -20,7 +23,7 @@ public class HelloController {
     private HelloService helloService;
 
     @RequestMapping("/say")
-    public Object sayHello(@RequestParam("name") String name) {
+    public Object sayHello(@RequestParam("name") String name, HttpServletRequest req, ServletResponse resp) {
         return helloService.hello(name);
     }
 }

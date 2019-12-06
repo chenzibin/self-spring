@@ -3,6 +3,7 @@ package self.spring.framework.web.servlet;
 import self.spring.framework.annotation.*;
 
 import javax.servlet.ServletException;
+import javax.servlet.ServletRequest;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -40,13 +41,6 @@ public class DispatcherServlet extends HttpServlet {
      * 保存URL和Method的映射关系
      */
     private Map<String, Method> handlerMapping = new HashMap<>();
-    /**
-     * 1、className: controllerInstance
-     * 2、requestUrl: controllerMethod
-     * 3、beanName: serviceInstance
-     * 4、interfaceName: serviceInstance
-     */
-    private Map<String, Object> mapping = new HashMap<>();
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
@@ -64,16 +58,22 @@ public class DispatcherServlet extends HttpServlet {
 
     private void doDispatcher(HttpServletRequest req, HttpServletResponse resp) throws IOException, InvocationTargetException, IllegalAccessException {
         String servletPath = req.getServletPath();
-        if (!mapping.containsKey(servletPath)) {
+        if (!handlerMapping.containsKey(servletPath)) {
             resp.getWriter().write("404 Not Found");
         }
 
-        Method method = (Method) mapping.get(servletPath);
-        Object instance = mapping.get(method.getDeclaringClass().getCanonicalName());
+        Method method = handlerMapping.get(servletPath);
+        Object instance = ioc.get(method.getDeclaringClass().getCanonicalName());
 
         Map<String, String[]> params = req.getParameterMap();
         Object[] invokeParams = Arrays.stream(method.getParameters())
                 .map(parameter -> {
+                    if (parameter.getType().isAssignableFrom(HttpServletRequest.class)) {
+                        return req;
+                    }
+                    if (parameter.getType().isAssignableFrom(HttpServletResponse.class)) {
+                        return resp;
+                    }
                     if (parameter.isAnnotationPresent(RequestParam.class)) {
                         RequestParam requestParam = parameter.getAnnotation(RequestParam.class);
                         String paramName = requestParam.value();
@@ -138,7 +138,7 @@ public class DispatcherServlet extends HttpServlet {
             for (String className : classNames) {
                 Class clazz = Class.forName(className);
                 if (clazz.isAnnotationPresent(Controller.class)) {
-                    mapping.put(className, clazz.newInstance());
+                    ioc.put(className, clazz.newInstance());
                 } else if (clazz.isAnnotationPresent(Service.class)) {
                     Service service = (Service) clazz.getAnnotation(Service.class);
                     String beanName = service.value();
@@ -146,10 +146,10 @@ public class DispatcherServlet extends HttpServlet {
                         beanName = clazz.getName();
                     }
                     Object instance = clazz.newInstance();
-                    mapping.put(beanName, instance);
+                    ioc.put(beanName, instance);
 
                     for (Class classInterface : clazz.getInterfaces()) {
-                        mapping.put(classInterface.getName(), instance);
+                        ioc.put(classInterface.getName(), instance);
                     }
                 }
             }
@@ -160,11 +160,11 @@ public class DispatcherServlet extends HttpServlet {
 
     private void doAutowired() {
         try {
-            for (Object object : mapping.values()) {
+            for (Object object : ioc.values()) {
                 if (object == null || !object.getClass().isAnnotationPresent(Controller.class)) {
                     continue;
                 }
-                Object instance = mapping.get(object.getClass().getName());
+                Object instance = ioc.get(object.getClass().getName());
                 for (Field field : object.getClass().getDeclaredFields()) {
                     if (!field.isAnnotationPresent(Autowired.class)) {
                         continue;
@@ -175,7 +175,7 @@ public class DispatcherServlet extends HttpServlet {
                         serviceName = field.getType().getName();
                     }
                     field.setAccessible(true);
-                    field.set(instance, mapping.get(serviceName));
+                    field.set(instance, ioc.get(serviceName));
                 }
 
             }
@@ -185,17 +185,23 @@ public class DispatcherServlet extends HttpServlet {
     }
 
     private void initHandlerMapping() {
-        String baseUrl = "";
-        if (clazz.isAnnotationPresent(RequestMapping.class)) {
-            RequestMapping classRequestMapping = (RequestMapping) clazz.getAnnotation(RequestMapping.class);
-            baseUrl = classRequestMapping.value();
-        }
-        for (Method method : clazz.getMethods()) {
-            if (method.isAnnotationPresent(RequestMapping.class)) {
-                RequestMapping methodRequestMapping = method.getAnnotation(RequestMapping.class);
-                String url = baseUrl + methodRequestMapping.value();
-                mapping.put(url, method);
+        for (Object object : ioc.values()) {
+            Class clazz = object.getClass();
+            if (clazz.isAnnotationPresent(Controller.class)) {
+                String baseUrl = "";
+                if (clazz.isAnnotationPresent(RequestMapping.class)) {
+                    RequestMapping classRequestMapping = (RequestMapping) clazz.getAnnotation(RequestMapping.class);
+                    baseUrl = classRequestMapping.value();
+                }
+                for (Method method : clazz.getMethods()) {
+                    if (method.isAnnotationPresent(RequestMapping.class)) {
+                        RequestMapping methodRequestMapping = method.getAnnotation(RequestMapping.class);
+                        String url = baseUrl + methodRequestMapping.value();
+                        handlerMapping.put(url, method);
+                    }
+                }
             }
         }
+
     }
 }
