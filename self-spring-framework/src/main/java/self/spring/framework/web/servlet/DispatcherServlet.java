@@ -3,16 +3,18 @@ package self.spring.framework.web.servlet;
 import self.spring.framework.annotation.*;
 
 import javax.servlet.ServletException;
-import javax.servlet.ServletRequest;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.util.*;
+import java.util.regex.Pattern;
 
 /**
  * DispatcherServlet
@@ -40,7 +42,7 @@ public class DispatcherServlet extends HttpServlet {
     /**
      * 保存URL和Method的映射关系
      */
-    private Map<String, Method> handlerMapping = new HashMap<>();
+    private List<Handler> handlerMapping = new ArrayList();
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
@@ -58,12 +60,13 @@ public class DispatcherServlet extends HttpServlet {
 
     private void doDispatcher(HttpServletRequest req, HttpServletResponse resp) throws IOException, InvocationTargetException, IllegalAccessException {
         String servletPath = req.getServletPath();
-        if (!handlerMapping.containsKey(servletPath)) {
+        Handler handler = handlerMapping.stream().filter(h -> h.pattern.matcher(servletPath).matches()).findFirst().orElse(null);
+        if (handler == null) {
             resp.getWriter().write("404 Not Found");
         }
 
-        Method method = handlerMapping.get(servletPath);
-        Object instance = ioc.get(method.getDeclaringClass().getCanonicalName());
+        Method method = handler.method;
+        Object instance = handler.controller;
 
         Map<String, String[]> params = req.getParameterMap();
         Object[] invokeParams = Arrays.stream(method.getParameters())
@@ -197,7 +200,8 @@ public class DispatcherServlet extends HttpServlet {
                     if (method.isAnnotationPresent(RequestMapping.class)) {
                         RequestMapping methodRequestMapping = method.getAnnotation(RequestMapping.class);
                         String url = baseUrl + methodRequestMapping.value();
-                        handlerMapping.put(url, method);
+                        Pattern pattern = Pattern.compile(url);
+                        handlerMapping.add(new Handler(object, method, pattern));
                     }
                 }
             }
