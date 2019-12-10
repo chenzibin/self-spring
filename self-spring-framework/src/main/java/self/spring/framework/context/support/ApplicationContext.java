@@ -1,9 +1,14 @@
 package self.spring.framework.context.support;
 
+import self.spring.framework.annotation.Autowired;
+import self.spring.framework.annotation.Controller;
+import self.spring.framework.annotation.Service;
 import self.spring.framework.bean.BeanWrapper;
 import self.spring.framework.bean.BeansException;
 import self.spring.framework.bean.factory.config.BeanDefinition;
+import self.spring.framework.bean.factory.config.BeanPostProcessor;
 
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -79,7 +84,75 @@ public class ApplicationContext extends AbstractApplicationContext {
      */
     @Override
     public Object getBean(String beanName) {
+
+        BeanDefinition beanDefinition = beanDefinitionMap.get(beanName);
+
+        try {
+            BeanPostProcessor beanPostProcessor = new BeanPostProcessor();
+
+            Object instance = instantiateBean(beanDefinition);
+
+            if (instance == null) {
+                return null;
+            }
+
+            beanPostProcessor.postProcessBeforeInitialization(instance, beanName);
+
+            BeanWrapper beanWrapper = new BeanWrapper(instance);
+
+            factoryBeanInstanceCache.put(beanName, beanWrapper);
+
+            beanPostProcessor.postProcessAfterInitialization(instance, beanName);
+
+            populateBean(beanName, instance);
+            return beanWrapper.getWrappedInstance();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
         return null;
+    }
+
+    private void populateBean(String beanName, Object instance) {
+
+        Class clazz = instance.getClass();
+        if (clazz.isAnnotationPresent(Controller.class) || clazz.isAnnotationPresent(Service.class)) {
+            for (Field field : clazz.getDeclaredFields()) {
+                if (!field.isAnnotationPresent(Autowired.class)) {
+                    continue;
+                }
+                Autowired autowired = field.getAnnotation(Autowired.class);
+                String name = autowired.value();
+                if ("".equals(name)) {
+                    name = field.getType().getName();
+                }
+                field.setAccessible(true);
+                try {
+                    field.set(instance, factoryBeanInstanceCache.get(name).getWrappedInstance());
+                } catch (IllegalAccessException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    private Object instantiateBean(BeanDefinition beanDefinition) {
+
+        Object instance = null;
+        String className = beanDefinition.getBeanClassName();
+
+        if (factoryBeanObjectCache.containsKey(className)) {
+            instance = factoryBeanObjectCache.get(className);
+        } else {
+            try {
+                Class<?> clazz = Class.forName(className);
+                instance = clazz.newInstance();
+                factoryBeanObjectCache.put(beanDefinition.getFactoryBeanName(), instance);
+            } catch (IllegalAccessException | InstantiationException | ClassNotFoundException e) {
+                e.printStackTrace();
+            }
+        }
+        return instance;
     }
 
     @Override
@@ -98,4 +171,5 @@ public class ApplicationContext extends AbstractApplicationContext {
     public Properties getConfig() {
         return reader.getConfig();
     }
+
 }
