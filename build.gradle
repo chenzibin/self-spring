@@ -16,4 +16,8 @@ allprojects {
         testCompile group: 'junit', name: 'junit', version: '4.11'
         providedCompile group: 'org.projectlombok', name: 'lombok', version: '1.18.10'
     }
+
+    tasks.withType(JavaCompile) {
+        options.encoding = "UTF-8"
+    }
 }
