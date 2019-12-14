@@ -12,11 +12,11 @@ import java.util.Properties;
 
 public class BeanDefinitionReader {
 
-    private List<String> registryBeanClasses = new ArrayList<>();
-
     private Properties config = new Properties();
 
     private final String SCAN_PACKAGE = "scanPackage";
+
+    private List<String> registryBeanClasses = new ArrayList<>();
 
     public BeanDefinitionReader(String... locations) {
         try (InputStream in = this.getClass().getClassLoader().getResourceAsStream(locations[0])) {
@@ -60,11 +60,11 @@ public class BeanDefinitionReader {
                 if (beanClass.isInterface()) {
                     continue;
                 }
-                result.add(doCreateBeanDefinition(beanClass));
+                result.add(doCreateBeanDefinition(beanClass.getName(), beanClass.getSimpleName()));
 
                 Class<?>[] interfaces = beanClass.getInterfaces();
                 for (Class<?> classInterface : interfaces) {
-                    result.add(doCreateBeanDefinition(classInterface));
+                    result.add(doCreateBeanDefinition(beanClass.getName(), classInterface.getName()));
                 }
             }
         } catch (ClassNotFoundException e) {
@@ -73,10 +73,10 @@ public class BeanDefinitionReader {
         return result;
     }
 
-    private BeanDefinition doCreateBeanDefinition(Class<?> beanClass) {
+    private BeanDefinition doCreateBeanDefinition(String beanClassName, String factoryBeanName) {
         BeanDefinition beanDefinition = new BeanDefinition();
-        beanDefinition.setBeanClassName(beanClass.getName());
-        beanDefinition.setFactoryBeanName(beanClass.getSimpleName());
+        beanDefinition.setBeanClassName(beanClassName);
+        beanDefinition.setFactoryBeanName(factoryBeanName);
         return beanDefinition;
     }
 
