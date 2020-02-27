@@ -1,3 +1,4 @@
 include 'self-spring-framework'
 include 'self-spring-test'
+include 'self-spring-geek'
 
