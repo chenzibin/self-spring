@@ -5,13 +5,16 @@
         https://www.springframework.org/schema/beans/spring-beans.xsd">
 
     <bean id="user" class="self.spring.geek.ioc.domain.User">
-        <!-- collaborators and configuration for this bean go here -->
+        <property name="name" value="chenzb" />
+        <property name="age" value="28" />
     </bean>
 
-    <bean id="superUser" class="self.spring.geek.ioc.domain.SuperUser">
-        <!-- collaborators and configuration for this bean go here -->
+    <bean id="superUser" class="self.spring.geek.ioc.domain.SuperUser" parent="user">
+        <property name="address" value="杭州" />
     </bean>
 
-    <!-- more bean definitions go here -->
+    <bean id="userFactory" class="org.springframework.beans.factory.config.ObjectFactoryCreatingFactoryBean">
+        <property name="targetBeanName" value="user" />
+    </bean>
 
 </beans>
